@@ -1,5 +1,5 @@
 {
-  "online": null,
-  "players": null,
-  "version": null
+  "online": true,
+  "players": 0,
+  "version": "1.21.10"
 }
