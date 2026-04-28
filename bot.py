@@ -16,8 +16,8 @@ import urllib.error
 
 MINECRAFT_SERVER   = "play.cafevanille.com"
 
-DISCORD_BOT_TOKEN  = os.environ["DISCORD_BOT_TOKEN"]   # secret GitHub
-GUILD_ID           = "620289546906632193"
+DISCORD_BOT_TOKEN  = os.environ["izA53ebOWerTD67IGy2HFqO4X8Rn8PLq"]   # secret GitHub
+GUILD_ID           = "1453461435551318087"
 
 # IDs des salons vocaux à renommer
 CHANNEL_STATUS     = "1432850727033897112"   # 🟢 Online / 🔴 Offline
