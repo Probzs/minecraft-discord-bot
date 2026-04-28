@@ -2,13 +2,15 @@ name: Minecraft Status Bot
 
 on:
   schedule:
-    # Toutes les 5 minutes
-    # ⚠️ GitHub arrondit au minimum à 5 min, c'est parfait pour notre cas
+    # Toutes les 5 minutes (minimum autorisé par GitHub)
     - cron: "*/5 * * * *"
-  workflow_dispatch: # permet de lancer manuellement depuis l'interface GitHub
+  workflow_dispatch: # lancement manuel depuis l'interface GitHub
 
 permissions:
-  contents: write   # nécessaire pour que le bot commite state.json
+  contents: write   # nécessaire pour commiter state.json
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true   # supprime le warning Node.js 20
 
 jobs:
   update-status:
@@ -19,7 +21,6 @@ jobs:
       - name: 📥 Checkout du repo
         uses: actions/checkout@v4
         with:
-          # On récupère le state.json commité par le run précédent
           fetch-depth: 1
 
       - name: 🐍 Setup Python
@@ -37,6 +38,5 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add state.json
-          # On ne commite que si state.json a changé
           git diff --cached --quiet || git commit -m "chore: update state [skip ci]"
           git push
