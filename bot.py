@@ -1,44 +1,60 @@
 """
 Minecraft Discord Status Bot
-Réplique du workflow n8n — met à jour les salons vocaux Discord
-avec le statut, les joueurs et la version du serveur Minecraft.
+Met à jour les salons Discord avec le statut Minecraft
+Version debug + logs améliorés
 """
 
 import json
 import os
-import sys
 import urllib.request
 import urllib.error
+import sys
+from datetime import datetime
 
 # ──────────────────────────────────────────────
-# CONFIGURATION — à adapter à ton serveur
+# CONFIG
 # ──────────────────────────────────────────────
 
-MINECRAFT_SERVER   = "play.cafevanille.com"
+MINECRAFT_SERVER = "play.cafevanille.com"
 
-DISCORD_BOT_TOKEN  = os.environ["DISCORD_BOT_TOKEN"]   # secret GitHub
-GUILD_ID           = "620289546906632193"
+DISCORD_BOT_TOKEN = os.environ["DISCORD_BOT_TOKEN"]
 
-# IDs des salons vocaux à renommer
-CHANNEL_STATUS     = "1432850727033897112"   # 🟢 Online / 🔴 Offline
-CHANNEL_PLAYERS    = "1432850729995079770"   # 👥 Joueurs : X/45
-CHANNEL_VERSION    = "1453829805681414226"   # 🎮 Version : X.X.X
+GUILD_ID = "620289546906632193"
 
-STATE_FILE         = "state.json"
+CHANNEL_STATUS  = "1432850727033897112"
+CHANNEL_PLAYERS = "1432850729995079770"
+CHANNEL_VERSION = "1453829805681414226"
+
+STATE_FILE = "state.json"
+
 
 # ──────────────────────────────────────────────
-# HELPERS
+# LOG SYSTEM
+# ──────────────────────────────────────────────
+
+def log(msg):
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
+
+
+# ──────────────────────────────────────────────
+# HTTP
 # ──────────────────────────────────────────────
 
 def http_get(url: str) -> dict:
-    req = urllib.request.Request(url, headers={"User-Agent": "MinecraftDiscordBot/1.0"})
+    req = urllib.request.Request(url, headers={"User-Agent": "MC-Discord-Bot/1.0"})
     with urllib.request.urlopen(req, timeout=10) as r:
         return json.loads(r.read().decode())
 
 
-def discord_patch(channel_id: str, name: str) -> None:
+# ──────────────────────────────────────────────
+# DISCORD PATCH (DEBUG VERSION)
+# ──────────────────────────────────────────────
+
+def discord_patch(channel_id: str, name: str) -> bool:
     url = f"https://discord.com/api/v10/channels/{channel_id}"
+
     payload = json.dumps({"name": name}).encode()
+
     req = urllib.request.Request(
         url,
         data=payload,
@@ -46,91 +62,113 @@ def discord_patch(channel_id: str, name: str) -> None:
         headers={
             "Authorization": f"Bot {DISCORD_BOT_TOKEN}",
             "Content-Type": "application/json",
+            "User-Agent": "MC-Discord-Bot/1.0"
         },
     )
+
     try:
         with urllib.request.urlopen(req, timeout=10) as r:
-            status = r.status
-        print(f"  ✅ Salon {channel_id} → « {name} » (HTTP {status})")
+            log(f"✅ Discord OK | channel={channel_id} → '{name}' | HTTP {r.status}")
+            return True
+
     except urllib.error.HTTPError as e:
         body = e.read().decode()
-        print(f"  ❌ Erreur Discord {e.code} pour le salon {channel_id}: {body}")
-        sys.exit(1)
+
+        log("❌ Discord ERROR")
+        log(f"   ├─ Channel : {channel_id}")
+        log(f"   ├─ Name    : {name}")
+        log(f"   ├─ HTTP    : {e.code}")
+        log(f"   ├─ Response: {body}")
+
+        return False
+
+    except Exception as e:
+        log("❌ Network ERROR Discord")
+        log(f"   └─ {e}")
+        return False
 
 
-def load_state() -> dict:
+# ──────────────────────────────────────────────
+# STATE
+# ──────────────────────────────────────────────
+
+def load_state():
     if os.path.exists(STATE_FILE):
         with open(STATE_FILE, "r") as f:
             return json.load(f)
-    # État initial neutre → tout sera mis à jour au premier run
     return {"online": None, "players": None, "version": None}
 
 
-def save_state(state: dict) -> None:
+def save_state(state):
     with open(STATE_FILE, "w") as f:
         json.dump(state, f, indent=2)
-    print(f"  💾 State sauvegardé : {state}")
+    log(f"💾 State sauvegardé : {state}")
+
 
 # ──────────────────────────────────────────────
-# LOGIQUE PRINCIPALE
+# MAIN
 # ──────────────────────────────────────────────
 
 def main():
-    print(f"🔍 Interrogation de {MINECRAFT_SERVER}…")
+    log(f"🔍 Vérification serveur Minecraft : {MINECRAFT_SERVER}")
 
     try:
         data = http_get(f"https://api.mcsrvstat.us/3/{MINECRAFT_SERVER}")
     except Exception as e:
-        print(f"❌ Impossible de joindre l'API mcsrvstat : {e}")
-        sys.exit(1)
+        log(f"❌ Erreur API Minecraft : {e}")
+        return
 
-    # Données actuelles
-    is_online      = bool(data.get("online", False))
+    is_online = bool(data.get("online", False))
     players_online = data.get("players", {}).get("online", 0)
-    players_max    = data.get("players", {}).get("max", 45)
-    version        = data.get("version", "Inconnue")
+    players_max = data.get("players", {}).get("max", 45)
+    version = data.get("version", "Inconnue")
 
-    print(f"📡 Serveur : {'🟢 EN LIGNE' if is_online else '🔴 HORS LIGNE'}")
-    if is_online:
-        print(f"   Joueurs : {players_online}/{players_max}")
-        print(f"   Version : {version}")
+    log(f"📡 Serveur : {'🟢 ONLINE' if is_online else '🔴 OFFLINE'}")
+    log(f"👥 Joueurs : {players_online}/{players_max}")
+    log(f"🎮 Version : {version}")
 
-    # État précédent
     old = load_state()
-    print(f"📂 Ancien état : {old}")
+    log(f"📂 Ancien état : {old}")
 
     updated = False
 
-    # ── 1. Statut ──────────────────────────────
+    # ── STATUS ──
     if old["online"] != is_online:
-        print("🔄 Statut changé → mise à jour du salon…")
+        log("🔄 Changement STATUS détecté")
         name = "🟢 Online" if is_online else "🔴 Offline"
-        discord_patch(CHANNEL_STATUS, name)
-        updated = True
+        updated |= discord_patch(CHANNEL_STATUS, name)
     else:
-        print("⏭️  Statut inchangé.")
+        log("⏭️ STATUS inchangé")
 
-    # ── 2. Joueurs ─────────────────────────────
+    # ── PLAYERS ──
     if old["players"] != players_online:
-        print("🔄 Joueurs changés → mise à jour du salon…")
-        discord_patch(CHANNEL_PLAYERS, f"👥 Joueurs : {players_online}/{players_max}")
-        updated = True
+        log("🔄 Changement PLAYERS détecté")
+        updated |= discord_patch(
+            CHANNEL_PLAYERS,
+            f"👥 Joueurs : {players_online}/{players_max}"
+        )
     else:
-        print("⏭️  Joueurs inchangés.")
+        log("⏭️ PLAYERS inchangé")
 
-    # ── 3. Version ─────────────────────────────
+    # ── VERSION ──
     if old["version"] != version:
-        print("🔄 Version changée → mise à jour du salon…")
-        discord_patch(CHANNEL_VERSION, f"🎮 Version : {version}")
-        updated = True
+        log("🔄 Changement VERSION détecté")
+        updated |= discord_patch(
+            CHANNEL_VERSION,
+            f"🎮 Version : {version}"
+        )
     else:
-        print("⏭️  Version inchangée.")
+        log("⏭️ VERSION inchangé")
 
-    # ── Sauvegarde du nouvel état ───────────────
+    # ── SAVE STATE ──
     if updated:
-        save_state({"online": is_online, "players": players_online, "version": version})
+        save_state({
+            "online": is_online,
+            "players": players_online,
+            "version": version
+        })
     else:
-        print("✅ Aucun changement détecté, rien à mettre à jour.")
+        log("✅ Aucun changement détecté")
 
 
 if __name__ == "__main__":
